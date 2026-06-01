@@ -1,0 +1,12 @@
+# Install the right torch build for your CUDA version if needed.
+torch
+torchvision
+torchgeo
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+pyyaml
+tqdm
+pillow

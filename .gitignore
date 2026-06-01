@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
+.ipynb_checkpoints/
+
+build/
+dist/
+
+# Data and outputs
+data/raw/
+data/processed/
+outputs/
+models/
+runs/
+logs/
