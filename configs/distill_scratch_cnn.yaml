@@ -1,4 +1,5 @@
 seed: 42
+run_name: scratch_cnn_distilled
 data:
   root: data/raw/EuroSAT
   num_classes: 10
@@ -8,8 +9,14 @@ data:
 model:
   name: scratch_cnn
   pretrained: false
+distill:
+  teacher_name: efficientnet_v2_s
+  teacher_ckpt: outputs/checkpoints/efficientnet_v2_s/best_model.pth
+  teacher_image_size: 224
+  temperature: 4.0
+  alpha: 0.7
 train:
-  epochs: 25
+  epochs: 40
   lr: 0.001
   weight_decay: 0.0001
   optimizer: adamw

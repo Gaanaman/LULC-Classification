@@ -1,6 +1,11 @@
 seed: 42
+run_name: scratch_cnn_ms_rgb
 data:
-  root: data/raw/EuroSAT
+  bands: multispectral
+  root_ms: data/raw/EuroSATMS
+  band_subset: rgb
+  drop_cirrus: true
+  add_indices: false
   num_classes: 10
   image_size: 64
   batch_size: 64
@@ -8,8 +13,9 @@ data:
 model:
   name: scratch_cnn
   pretrained: false
+  channels: [64, 128, 256, 512]
 train:
-  epochs: 25
+  epochs: 40
   lr: 0.001
   weight_decay: 0.0001
   optimizer: adamw
