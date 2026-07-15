@@ -2,15 +2,15 @@ seed: 42
 data:
   root: data/raw/EuroSAT
   num_classes: 10
-  image_size: 64
-  batch_size: 64
+  image_size: 224
+  batch_size: 32
   num_workers: 4
 model:
-  name: scratch_cnn
-  pretrained: false
+  name: efficientnet_v2_s
+  pretrained: true
 train:
-  epochs: 25
-  lr: 0.001
+  epochs: 15
+  lr: 0.0003
   weight_decay: 0.0001
   optimizer: adamw
   scheduler: cosine

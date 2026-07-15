@@ -11,7 +11,12 @@ dist/
 # Data and outputs
 data/raw/
 data/processed/
-outputs/
+outputs/*
 models/
 runs/
 logs/
+
+# Keep lightweight result tables and figures; checkpoints stay ignored.
+!outputs/reports/
+outputs/reports/**/*.npy
+outputs/logs/

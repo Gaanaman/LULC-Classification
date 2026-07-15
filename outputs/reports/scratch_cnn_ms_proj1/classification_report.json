@@ -1,0 +1,75 @@
+{
+    "AnnualCrop": {
+        "precision": 0.9461663947797716,
+        "recall": 0.9731543624161074,
+        "f1-score": 0.9594706368899917,
+        "support": 596.0
+    },
+    "Forest": {
+        "precision": 0.9639934533551555,
+        "recall": 0.96875,
+        "f1-score": 0.9663658736669402,
+        "support": 608.0
+    },
+    "HerbaceousVegetation": {
+        "precision": 0.8952702702702703,
+        "recall": 0.924956369982548,
+        "f1-score": 0.9098712446351931,
+        "support": 573.0
+    },
+    "Highway": {
+        "precision": 0.9603174603174603,
+        "recall": 0.9758064516129032,
+        "f1-score": 0.968,
+        "support": 496.0
+    },
+    "Industrial": {
+        "precision": 0.984,
+        "recall": 0.9820359281437125,
+        "f1-score": 0.983016983016983,
+        "support": 501.0
+    },
+    "Pasture": {
+        "precision": 0.9603174603174603,
+        "recall": 0.9166666666666666,
+        "f1-score": 0.937984496124031,
+        "support": 396.0
+    },
+    "PermanentCrop": {
+        "precision": 0.9415204678362573,
+        "recall": 0.8977695167286245,
+        "f1-score": 0.9191246431969553,
+        "support": 538.0
+    },
+    "Residential": {
+        "precision": 0.9855334538878843,
+        "recall": 0.983754512635379,
+        "f1-score": 0.9846431797651309,
+        "support": 554.0
+    },
+    "River": {
+        "precision": 0.9773156899810964,
+        "recall": 0.9773156899810964,
+        "f1-score": 0.9773156899810964,
+        "support": 529.0
+    },
+    "SeaLake": {
+        "precision": 0.9950576606260296,
+        "recall": 0.9917898193760263,
+        "f1-score": 0.993421052631579,
+        "support": 609.0
+    },
+    "accuracy": 0.9605555555555556,
+    "macro avg": {
+        "precision": 0.9609492311371385,
+        "recall": 0.9591999317543063,
+        "f1-score": 0.9599213799907901,
+        "support": 5400.0
+    },
+    "weighted avg": {
+        "precision": 0.9607618316421785,
+        "recall": 0.9605555555555556,
+        "f1-score": 0.9605161747390741,
+        "support": 5400.0
+    }
+}
