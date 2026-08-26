@@ -1,4 +1,4 @@
-# Master results — EuroSAT land-use classification
+# Master results: EuroSAT land-use classification
 
 ## Distillation / capacity sweep (JPG-RGB, random 80/10/10 split)
 

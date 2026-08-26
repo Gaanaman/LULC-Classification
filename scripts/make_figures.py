@@ -3,7 +3,7 @@
 Outputs to outputs/reports/figures/:
   - pareto_accuracy_vs_params.png       (capacity sweep)
   - multispectral_per_class_f1.png      (RGB vs all-bands per-class F1)
-  - virtual_sensor_rate_distortion.png  (accuracy vs learned channel budget)
+  - virtual_sensor_rate_distortion.png  (test accuracy vs learned channel budget)
   - virtual_sensor_response_functions.png (learned spectral mixing weights)
   - confusion_<run>.png                 (multispectral runs)
 """
@@ -44,13 +44,19 @@ def pareto_plot():
     ms_acc = _acc("scratch_cnn_ms_all")
     ax.scatter([1_562_250], [ms_acc], marker="*", s=420, color="#dd6b20", zorder=5,
                label=f"ScratchCNN-M + 12-band ({ms_acc:.1f}%)")
+    # per-point label offsets: keep the two pretrained labels from colliding
+    offsets = {"ScratchCNN 94K": (10, 6), "ScratchCNN-S 391K": (8, 8),
+               "ScratchCNN-M 1.56M": (8, -22), "ResNet-18 11M": (-4, -26),
+               "EffNet-V2-S 20M": (-70, 10)}
     for (label, p, _), y in zip(pts, ys):
         ax.annotate(f"{label}\n{y:.1f}%", (p, y), textcoords="offset points",
-                    xytext=(8, -18 if "94K" in label else 8), fontsize=8)
+                    xytext=offsets.get(label, (8, 8)), fontsize=8)
+    ax.margins(x=0.10, y=0.12)
     ax.set_xscale("log")
     ax.set_xlabel("Parameters (log scale)")
     ax.set_ylabel("Test accuracy (%)")
-    ax.set_title("Accuracy vs. model size on EuroSAT\n(multispectral input lets a 1.56M model rival 11–20M pretrained backbones)")
+    ax.set_title("Accuracy versus model size on EuroSAT\n"
+                 "(the 12-band 1.56M model lies within 0.13% of ResNet-18)")
     ax.grid(True, which="both", alpha=0.3)
     ax.legend(loc="lower right")
     fig.tight_layout()
@@ -84,7 +90,8 @@ def multispectral_plot():
     ax.set_xticklabels(classes, rotation=40, ha="right")
     ax.set_ylabel("Per-class F1")
     ax.set_ylim(0.93, 1.005)
-    ax.set_title("Multispectral bands rescue the weak classes\n(same 1.56M model; RGB 97.6% → all-bands 98.5%)")
+    ax.set_title("Per-class F1, RGB versus all 12 bands\n"
+                 "(same 1.56M model; 97.59% and 98.50% overall)")
     ax.legend(loc="lower left")
     ax.grid(True, axis="y", alpha=0.3)
     fig.tight_layout()
@@ -110,8 +117,8 @@ def virtual_sensor_curve():
     ax.set_xlabel("Spectral channel budget k")
     ax.set_ylabel("Test accuracy (%)")
     ax.set_xticks(ks)
-    ax.set_title("Spectral rate–distortion: accuracy vs. learned channel budget\n"
-                 "(2 learned channels beat RGB; 6 match all 12 bands; same 1.56M model)")
+    ax.set_title("Test accuracy versus learned spectral channel budget\n"
+                 "(same 1.56M model)")
     ax.grid(True, alpha=0.3)
     ax.legend(loc="lower right")
     fig.tight_layout()
@@ -126,7 +133,9 @@ def response_function_heatmap():
     # Kept-band order (torchgeo order minus B10/cirrus) and center wavelengths (nm).
     bands = ["B01\n443", "B02\n490", "B03\n560", "B04\n665", "B05\n705", "B06\n740",
              "B07\n783", "B08\n842", "B09\n945", "B11\n1610", "B12\n2190", "B8A\n865"]
-    fig, axes = plt.subplots(1, 3, figsize=(16, 3.6), sharey=False)
+    # Vertical layout (one panel per k) sized for a single column.
+    fig, axes = plt.subplots(3, 1, figsize=(6.4, 5.4), sharex=True,
+                             gridspec_kw={"height_ratios": [1, 2, 3]})
     for ax, k in zip(axes, [1, 2, 3]):
         sd = torch.load(f"outputs/checkpoints/scratch_cnn_ms_proj{k}/best_model.pth",
                         map_location="cpu", weights_only=True)
@@ -137,13 +146,12 @@ def response_function_heatmap():
                 w[i] = -w[i]
             w[i] = w[i] / np.abs(w[i]).max()
         im = ax.imshow(w, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
-        ax.set_xticks(range(12))
-        ax.set_xticklabels(bands, fontsize=7)
         ax.set_yticks(range(w.shape[0]))
-        ax.set_yticklabels([f"ch{i+1}" for i in range(w.shape[0])], fontsize=9)
-        ax.set_title(f"k={k} virtual sensor", fontsize=11)
-    fig.colorbar(im, ax=axes, shrink=0.8, label="normalized weight")
-    fig.suptitle("Learned spectral response functions (weights over standardized bands)", y=1.04)
+        ax.set_yticklabels([f"ch{i+1}" for i in range(w.shape[0])], fontsize=10)
+        ax.set_title(f"k={k} virtual sensor", fontsize=11, loc="left")
+    axes[-1].set_xticks(range(12))
+    axes[-1].set_xticklabels(bands, fontsize=8)
+    fig.colorbar(im, ax=axes, shrink=0.85, label="normalised weight")
     out = FIG_DIR / "virtual_sensor_response_functions.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print(f"Saved {out}")

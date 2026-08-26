@@ -3,10 +3,11 @@ torch
 torchvision
 torchgeo
 numpy
-pandas
 scikit-learn
 matplotlib
 seaborn
 pyyaml
 tqdm
-pillow
+pillow          # runtime dependency of torchvision's JPEG loading
+scipy
+streamlit

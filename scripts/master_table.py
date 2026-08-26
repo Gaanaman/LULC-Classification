@@ -54,7 +54,7 @@ def param_count(config):
 
 
 def main():
-    lines = ["# Master results — EuroSAT land-use classification\n"]
+    lines = ["# Master results: EuroSAT land-use classification\n"]
     for group, runs in GROUPS.items():
         lines.append(f"## {group}\n")
         lines.append("| Model / input | Params | Accuracy | Macro F1 |")

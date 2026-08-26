@@ -1,36 +1,47 @@
 # LULC-Classification
 
-Land use / land cover classification on EuroSAT (Sentinel-2, 10 classes),
-studying what actually drives accuracy in the 98%+ regime: model capacity,
-input spectrum, or training signal. Role for this repo: model training.
+Land use and land cover classification on EuroSAT (Sentinel-2, 10 classes). The
+question is what drives accuracy once a benchmark sits above 98%: model
+capacity, the input spectrum, or the training signal. The backbone family is
+held fixed and one factor is varied at a time.
 
-## Studies in this repo
+## Experiments
 
-1. **Capacity / distillation sweep** — scratch CNNs at 94K / 391K / 1.56M
-   parameters, each with and without knowledge distillation from a fine-tuned
-   EfficientNet-V2-S teacher. Finding: accuracy tracks capacity; distillation
-   from the 20M teacher adds nothing at any student size.
-2. **Multispectral input** — the same 1.56M model on RGB vs. all 12 Sentinel-2
-   bands vs. bands + spectral indices (NDVI/NDWI/NDBI). Finding: 12 raw bands
-   reach 98.5% (matching ResNet-18); indices add nothing beyond raw bands.
-3. **Task-optimized virtual sensors** — a learnable 1x1 spectral mixing layer
-   compresses the 12 bands into k channels, swept k=1..6. Finding: two learned
-   channels beat 3-channel RGB; six match all 12 bands.
+**1. Capacity and distillation.** Scratch CNNs at 0.094M / 0.39M / 1.56M
+parameters, each with and without knowledge distillation from a fine-tuned
+EfficientNet-V2-S teacher. Accuracy rises with model scale (92.26% to 96.41%).
+Distillation changes accuracy by -0.82%, +0.18% and +0.07% at the three sizes,
+so it does not help at any student size.
 
-Baselines: scratch CNN, ResNet-18, EfficientNet-V2-S (fine-tuned from ImageNet,
-98.6% / 98.9% test accuracy). Combined results in
-`outputs/reports/master_results.md`; figures in `outputs/reports/figures/`.
+**2. Input bands.** The same 1.56M model on RGB, on all 12 non-cirrus Sentinel-2
+bands, and on bands plus spectral indices (NDVI, NDWI, NDBI). RGB gives 97.59%,
+12 bands give 98.50%, indices give 98.44%. A 10-band ablation dropping the
+atmospheric bands B01 and B09 gives 98.52%, so the gain does not depend on them.
+
+**3. Learned spectral projection.** A 1x1 convolution maps the 12 bands to k
+channels, trained end to end, swept over k = 1, 2, 3, 4, 6. Three learned
+channels give 98.17% against 97.59% for three-channel RGB. Six give 98.48%,
+within 0.02% of all twelve bands. RGB and k=2 were repeated over three seeds:
+97.54 +/- 0.06% against 97.96 +/- 0.12%, with no overlap between the runs.
+
+Reference points: ResNet-18 and EfficientNet-V2-S fine-tuned from ImageNet reach
+98.63% and 98.93%. Combined results are in `outputs/reports/master_results.md`,
+figures in `outputs/reports/figures/`.
 
 ## Dataset
 
-- EuroSAT, 27,000 labeled images, 10 classes.
-- RGB version auto-downloads via torchvision to `data/raw/EuroSAT/` on first run.
-- Multispectral (13-band GeoTIFF) via torchgeo to `data/raw/EuroSATMS/` (~2 GB).
-- Original dataset: https://github.com/phelber/EuroSAT (Helber et al., 2019).
+EuroSAT, 27,000 labelled 64x64 patches, 10 classes.
 
-The dataset and checkpoints are gitignored — this repo holds code and
-lightweight result tables/figures. Re-running the commands below regenerates
-everything else.
+- RGB release downloads via torchvision to `data/raw/EuroSAT/` on first run.
+- 13-band release downloads via torchgeo to `data/raw/EuroSATMS/` (about 2 GB).
+- Source: https://github.com/phelber/EuroSAT (Helber et al., 2019).
+
+RGB runs use a random 80/10/10 split at seed 42. Multispectral runs use
+torchgeo's official 60/20/20 split, so RGB results are compared only within an
+experiment.
+
+`data/`, `outputs/checkpoints/` and `models/` are gitignored. The repository
+holds code plus the result tables and figures.
 
 ## Setup
 
@@ -39,51 +50,62 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Reproducing the studies
+## Running
 
-All commands run from this directory. Configs in `configs/` are the single
-source of truth; `run_name` in each config sets its output directory.
+Configs in `configs/` are the single source of truth; `run_name` in each config
+sets its output directory.
 
 ```bash
-# Baselines
 python scripts/train.py    --config configs/resnet18.yaml
-python scripts/evaluate.py --config configs/resnet18.yaml --ckpt outputs/checkpoints/resnet18/best_model.pth
-
-# Study 1: distillation (needs a trained teacher checkpoint)
-python scripts/train.py    --config configs/scratch_cnn_m_distill.yaml
-
-# Study 2: multispectral
-python scripts/train.py    --config configs/scratch_cnn_ms_all.yaml
-
-# Study 3: virtual sensor (k learned channels)
-python scripts/train.py    --config configs/scratch_cnn_ms_proj3.yaml
-
-# Reporting
-python scripts/benchmark.py    --runs <config.yaml>:<ckpt.pth> ...   # params/speed/acc/F1
-python scripts/master_table.py                                       # combined results
-python scripts/ms_compare.py                                         # per-class F1 across MS inputs
-python scripts/make_figures.py                                       # figures for the report
+python scripts/evaluate.py --config configs/resnet18.yaml \
+                           --ckpt outputs/checkpoints/resnet18/best_model.pth
 ```
+
+Analysis, once the runs exist:
+
+```bash
+python scripts/master_table.py   # combined results table
+python scripts/ms_compare.py     # per-class F1 across band configurations
+python scripts/make_figures.py   # figures
+python scripts/mcnemar.py        # paired significance tests
+python scripts/seed_stats.py     # multi-seed means and Welch test
+python scripts/benchmark.py --runs configs/resnet18.yaml:<ckpt> ...
+```
+
+Multi-seed and ablation runs:
+
+```bash
+bash scripts/run_seed_sweep.sh   # RGB and k=2 at seeds 43, 44
+bash scripts/run_ablation.sh     # 10-band surface-only ablation
+```
+
+Set `PYTHON` to pick an interpreter, for example `PYTHON=python3.12 bash
+scripts/run_seed_sweep.sh`.
+
+## Interactive explorer
+
+```bash
+streamlit run app.py
+```
+
+Loads the saved metrics and confusion matrices and lets you step through the
+three experiments, the per-class errors and the learned spectral weights.
 
 ## Layout
 
 ```
-configs/    experiment configs (one per run)
-scripts/    thin CLI wrappers -> functions in src/
-src/
-  data/         eurosat.py (RGB), eurosat_ms.py (13-band via torchgeo)
-  models/       scratch_cnn.py, finetune.py, spectral.py (virtual sensor)
-  training/     train.py (train_from_config, optional KD)
-  eval/         evaluate.py, benchmark.py, metrics.py
-  visualization/ plots.py, grad_cam.py
-outputs/    checkpoints, reports, figures, logs (mostly gitignored)
+src/data/        EuroSAT loaders, RGB and 13-band
+src/models/      ScratchCNN, fine-tuned backbones, spectral projection
+src/training/    training loop, optional distillation
+src/eval/        evaluation, metrics, throughput benchmark
+src/visualization/ plots
+scripts/         thin CLI wrappers, one per task
+configs/         one YAML per run
 ```
 
-## Notes for collaborators
+## Notes
 
-- Apple Silicon (MPS): launch long runs with an absolute interpreter path and
-  wrap in `caffeinate -dims`; scripts that spawn DataLoaders need a `__main__`
-  guard or `num_workers=0`.
-- The RGB studies use a random 80/10/10 split (seed 42); the multispectral
-  studies use torchgeo's official 60/20/20 split. Keep splits matched when
-  comparing across the two.
+Training used the MPS backend on Apple silicon; a 40-epoch run of the 1.56M
+model takes about 32 minutes. Checkpoints are plain state dicts, loaded with
+`torch.load(..., weights_only=True)`. Scripts that spawn DataLoader workers need
+a `__main__` guard or `num_workers=0` on macOS.

@@ -28,7 +28,7 @@ def main():
 
     labels = [l for l, _ in RUNS]
     lines = []
-    header = "| Class | " + " | ".join(labels) + " | Δ(indices−rgb) |"
+    header = "| Class | " + " | ".join(labels) + " | Δ (indices − rgb) |"
     lines.append(header)
     lines.append("|" + "---|" * (len(labels) + 2))
     for c in CLASSES:
@@ -42,7 +42,7 @@ def main():
                  + f" | **{macro[-1]-macro[0]:+.3f}** |")
     acc = [reports[l]["accuracy"] for l in labels]
     lines.append(f"| **accuracy** | " + " | ".join(f"**{v*100:.2f}%**" for v in acc)
-                 + f" | **{(acc[-1]-acc[0])*100:+.2f}pt** |")
+                 + f" | **{(acc[-1]-acc[0])*100:+.2f}%** |")
 
     table = "\n".join(lines)
     print("\n" + table)

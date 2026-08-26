@@ -16,7 +16,7 @@ models/
 runs/
 logs/
 
-# Keep lightweight result tables and figures; checkpoints stay ignored.
+# Keep lightweight result tables, figures and confusion matrices (about 1 KB each);
+# checkpoints and logs stay ignored.
 !outputs/reports/
-outputs/reports/**/*.npy
 outputs/logs/

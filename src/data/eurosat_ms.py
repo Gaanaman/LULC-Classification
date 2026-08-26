@@ -32,9 +32,18 @@ def compute_indices(img: torch.Tensor) -> torch.Tensor:
     return torch.stack([ndvi, ndwi, ndbi], dim=0)
 
 
+COASTAL, WATER_VAPOUR = 0, 8  # B01, B09: atmospheric, 60 m native resolution
+
+
 def _kept_bands(band_subset: str, drop_cirrus: bool):
     if band_subset == "rgb":
         return [RED, GREEN, BLUE]
+    if band_subset == "surface":
+        # Drops every atmospheric band (B01, B09, B10), leaving 10 surface bands.
+        # Used to test whether the multispectral gain depends on bands that can
+        # carry scene identity rather than surface reflectance.
+        drop = {CIRRUS, COASTAL, WATER_VAPOUR}
+        return [b for b in range(N_BANDS) if b not in drop]
     return [b for b in range(N_BANDS) if not (drop_cirrus and b == CIRRUS)]
 
 
@@ -50,8 +59,16 @@ def infer_in_channels(config: Dict) -> int:
 
 
 def _base_dataset(root: str, split: str):
+    """Load the 13-band split, downloading it on first use if absent (~2GB)."""
     from torchgeo.datasets import EuroSAT as TGEuroSAT
-    return TGEuroSAT(root=root, split=split, bands=TGEuroSAT.all_band_names, download=False)
+    from torchgeo.datasets.errors import DatasetNotFoundError
+    try:
+        return TGEuroSAT(root=root, split=split,
+                         bands=TGEuroSAT.all_band_names, download=False)
+    except DatasetNotFoundError:
+        print(f"EuroSAT multispectral not found at {root}; downloading (~2GB).")
+        return TGEuroSAT(root=root, split=split,
+                         bands=TGEuroSAT.all_band_names, download=True)
 
 
 def compute_or_load_stats(root: str, band_subset: str, drop_cirrus: bool, add_indices: bool) -> Dict[str, torch.Tensor]:
@@ -102,7 +119,7 @@ class EuroSATMS(Dataset):
         return len(self.base)
 
     def _augment(self, x: torch.Tensor) -> torch.Tensor:
-        # Geometry-only augmentation (flips/90-degree rotations) — safe for all channels.
+        # Geometry-only augmentation (flips/90-degree rotations), safe for all channels.
         if torch.rand(1).item() < 0.5:
             x = torch.flip(x, dims=[2])
         if torch.rand(1).item() < 0.5:
