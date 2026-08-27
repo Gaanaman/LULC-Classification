@@ -29,7 +29,8 @@ REGION = {"B01": "visible", "B02": "visible", "B03": "visible", "B04": "visible"
           "B05": "red edge", "B06": "red edge", "B07": "red edge",
           "B08": "NIR", "B8A": "NIR", "B11": "SWIR", "B12": "SWIR", "B09": "visible"}
 
-st.set_page_config(page_title="EuroSAT land-cover experiments", layout="wide")
+st.set_page_config(page_title="EuroSAT land-cover experiments", layout="wide",
+                   initial_sidebar_state="collapsed")
 
 
 @st.cache_data
@@ -134,19 +135,66 @@ def spectra(per_class, split="test", seed=0):
     return class_spectra(str(MS_ROOT), split, per_class, seed)
 
 
-page = st.sidebar.radio("View", [
-    "Overview",
-    "See the data",
-    "1. Capacity and distillation",
-    "2. Input bands",
-    "Spectral signatures",
-    "3. Learned spectral projection",
-    "Where the model looks",
-    "Where the errors are",
-    "Reproducibility",
-    "Report figures",
-])
-st.sidebar.caption("Reads outputs/reports/ and outputs/checkpoints/.")
+# Navigation is a timeline: one bulb per step, always visible, no menu to open.
+# Real buttons carry the click; the keys give the CSS below a scoped hook.
+STEPS = [
+    ("Overview", "Overview"),
+    ("See the data", "Data"),
+    ("1. Capacity and distillation", "Capacity"),
+    ("2. Input bands", "Bands"),
+    ("Spectral signatures", "Spectra"),
+    ("3. Learned spectral projection", "Projection"),
+    ("Where the model looks", "Grad-CAM"),
+    ("Where the errors are", "Errors"),
+    ("Reproducibility", "Seeds"),
+    ("Report figures", "Figures"),
+]
+
+st.markdown("""
+<style>
+/* the rail linking the bulbs, drawn behind them */
+div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-nav"]) {
+    position: relative;
+    align-items: flex-start;
+}
+div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-nav"])::before {
+    content: "";
+    position: absolute;
+    top: 18px; left: 7%; right: 7%;
+    height: 2px;
+    background: rgba(250, 250, 250, 0.16);
+    z-index: 0;
+}
+div[class*="st-key-nav"] { display: flex; justify-content: center; }
+div[class*="st-key-nav"] button {
+    position: relative; z-index: 1;
+    width: 38px; height: 38px; min-height: 38px;
+    padding: 0; border-radius: 50%;
+    font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.tl-label {
+    text-align: center; font-size: 10.5px; line-height: 1.15;
+    margin-top: 5px; opacity: 0.55;
+}
+.tl-label.tl-on { opacity: 1; font-weight: 600; }
+</style>
+""", unsafe_allow_html=True)
+
+if "page" not in st.session_state:
+    st.session_state.page = STEPS[0][0]
+
+for col, (full, short), n in zip(st.columns(len(STEPS)), STEPS,
+                                 range(1, len(STEPS) + 1)):
+    on = st.session_state.page == full
+    with col:
+        if st.button(str(n), key=f"nav{n}", help=full,
+                     type="primary" if on else "secondary"):
+            st.session_state.page = full
+            st.rerun()
+        st.markdown(f"<div class='tl-label{' tl-on' if on else ''}'>{short}</div>",
+                    unsafe_allow_html=True)
+page = st.session_state.page
+st.divider()
 
 
 # ---------------------------------------------------------------- Overview
