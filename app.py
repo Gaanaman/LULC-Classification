@@ -16,6 +16,7 @@ import streamlit as st
 ROOT = Path(__file__).parent
 REPORTS = ROOT / "outputs" / "reports"
 CKPTS = ROOT / "outputs" / "checkpoints"
+MS_ROOT = ROOT / "data" / "raw" / "EuroSATMS"
 
 CLASSES = ["AnnualCrop", "Forest", "HerbaceousVegetation", "Highway", "Industrial",
            "Pasture", "PermanentCrop", "Residential", "River", "SeaLake"]
@@ -77,13 +78,73 @@ RUNS = {
     "k=6 learned": "scratch_cnn_ms_proj6",
 }
 
+CONFIGS = {
+    "RGB (3 bands)": "configs/scratch_cnn_ms_rgb.yaml",
+    "All bands (12)": "configs/scratch_cnn_ms_all.yaml",
+    "Surface bands (10)": "configs/scratch_cnn_ms_surface.yaml",
+    "k=2 learned": "configs/scratch_cnn_ms_proj2.yaml",
+    "k=3 learned": "configs/scratch_cnn_ms_proj3.yaml",
+    "k=6 learned": "configs/scratch_cnn_ms_proj6.yaml",
+}
+
+
+@st.cache_resource(show_spinner="Loading patches...")
+def raw_dataset(split="test"):
+    from src.data.eurosat_ms import _base_dataset
+    return _base_dataset(str(MS_ROOT), split)
+
+
+@st.cache_resource(show_spinner="Loading model...")
+def model_for(label):
+    from src.visualization.interpret import load_model
+    run = RUNS[label]
+    return load_model(str(ROOT / CONFIGS[label]),
+                      str(CKPTS / run / "best_model.pth"))
+
+
+@st.cache_resource(show_spinner="Preparing inputs...")
+def dataset_for(label, split="test"):
+    from src.visualization.interpret import make_dataset
+    return make_dataset(str(ROOT / CONFIGS[label]), split)
+
+
+@st.cache_data(show_spinner="Sampling patches...")
+def indices_by_class(per_class, split="test", seed=0):
+    from src.visualization.interpret import sample_indices
+    return {k: list(v) for k, v in
+            sample_indices(str(MS_ROOT), split, per_class, seed).items()}
+
+
+@st.cache_data(show_spinner="Scoring patches...")
+def predictions(label, idxs, split="test"):
+    """(true, predicted) for one model over the given dataset indices."""
+    import torch
+    model, ds = model_for(label), dataset_for(label, split)
+    out = []
+    for i in idxs:
+        x, y = ds[i]
+        with torch.no_grad():
+            out.append((int(y), int(model(x.unsqueeze(0)).argmax(dim=1))))
+    return out
+
+
+@st.cache_data(show_spinner="Reading reflectance...")
+def spectra(per_class, split="test", seed=0):
+    from src.visualization.interpret import class_spectra
+    return class_spectra(str(MS_ROOT), split, per_class, seed)
+
+
 page = st.sidebar.radio("View", [
     "Overview",
+    "See the data",
     "1. Capacity and distillation",
     "2. Input bands",
+    "Spectral signatures",
     "3. Learned spectral projection",
+    "Where the model looks",
     "Where the errors are",
     "Reproducibility",
+    "Report figures",
 ])
 st.sidebar.caption("Reads outputs/reports/ and outputs/checkpoints/.")
 
@@ -240,7 +301,7 @@ elif page.startswith("3."):
 
 
 # ------------------------------------------------- where the errors are
-elif page.startswith("Where"):
+elif page == "Where the errors are":
     st.title("Where the errors are")
     choice = st.selectbox("configuration", ["RGB (3 bands)", "All bands (12)",
                                             "k=3 learned", "Surface bands (10)"])
@@ -278,7 +339,7 @@ elif page.startswith("Where"):
 
 
 # ------------------------------------------------------- reproducibility
-else:
+elif page == "Reproducibility":
     st.title("Reproducibility")
     st.subheader("Multi-seed runs")
     seeds = {"RGB (3 bands)": ["scratch_cnn_ms_rgb", "scratch_cnn_ms_rgb_s43",
@@ -315,3 +376,194 @@ else:
     st.write("40 epochs at 64x64, batch 64, AdamW at 1e-3 with weight decay 1e-4, "
              "cosine annealing to zero. Pretrained backbones: 15 epochs at 224x224, "
              "batch 32, 3e-4. Checkpoint selected on lowest validation cross-entropy.")
+
+
+# ------------------------------------------------------------ see the data
+elif page == "See the data":
+    st.title("See the data")
+    st.write(
+        "Every patch is 64x64 at 10 m ground sampling. The same patch is shown "
+        "under four band combinations. Only the first is what an RGB model sees."
+    )
+    from src.visualization.interpret import COMPOSITES, composite
+
+    cls = st.selectbox("class", CLASSES, index=CLASSES.index("River"))
+    n = st.slider("patches", 2, 6, 4)
+    per_class = indices_by_class(8)
+    base = raw_dataset()
+    idxs = per_class[CLASSES.index(cls)][:n]
+
+    for name in COMPOSITES:
+        st.subheader(name)
+        cols = st.columns(n)
+        for col, i in zip(cols, idxs):
+            img = base[i]["image"].float()
+            col.image(composite(img, name), use_container_width=True)
+    st.caption(
+        "River and the crop classes are the ones the 12-band model improves most. "
+        "In true colour a river channel and a bare field can both read as a pale "
+        "strip; the infrared combinations separate them because water absorbs "
+        "near-infrared while vegetation and soil reflect it."
+    )
+
+
+# --------------------------------------------------- spectral signatures
+elif page == "Spectral signatures":
+    st.title("Spectral signatures")
+    st.write(
+        "Mean surface reflectance per class, averaged over sampled test patches "
+        "and plotted against wavelength. This is the information an RGB model "
+        "does not receive."
+    )
+    from src.visualization.interpret import WAVELENGTH_NM, RAW_INDEX
+
+    per_class = st.slider("patches averaged per class", 6, 40, 16, step=2)
+    picks = st.multiselect("classes", CLASSES,
+                           default=["River", "AnnualCrop", "Forest", "Residential"])
+    if not picks:
+        st.info("Select at least one class.")
+    else:
+        mu, sd = spectra(per_class)
+        order = sorted(BANDS, key=lambda b: WAVELENGTH_NM[b])
+        rows = []
+        for c in picks:
+            li = CLASSES.index(c)
+            for b in order:
+                rows.append({"class": c, "band": b,
+                             "wavelength (nm)": WAVELENGTH_NM[b],
+                             "reflectance": float(mu[li][RAW_INDEX[b]])})
+        df = pd.DataFrame(rows)
+        chart = (alt.Chart(df)
+                 .mark_line(point=True)
+                 .encode(x=alt.X("wavelength (nm):Q",
+                                 scale=alt.Scale(type="log", nice=False)),
+                         y=alt.Y("reflectance:Q", title="mean reflectance"),
+                         color="class:N",
+                         tooltip=["class", "band", "wavelength (nm)", "reflectance"])
+                 .properties(height=380))
+        st.altair_chart(chart, use_container_width=True)
+
+        vis = [b for b in order if WAVELENGTH_NM[b] <= 700]
+        rest = [b for b in order if WAVELENGTH_NM[b] > 700]
+        st.caption(
+            f"The four visible bands ({', '.join(vis)}) span {WAVELENGTH_NM[vis[0]]}"
+            f"-{WAVELENGTH_NM[vis[-1]]} nm. The remaining {len(rest)} bands reach "
+            f"{WAVELENGTH_NM[rest[-1]]} nm, where vegetation, bare soil and water "
+            "separate most clearly."
+        )
+        st.subheader("Separation gained beyond the visible")
+        pairs = []
+        for i, a in enumerate(picks):
+            for b_ in picks[i + 1:]:
+                ia, ib = CLASSES.index(a), CLASSES.index(b_)
+                v = np.array([abs(mu[ia][RAW_INDEX[x]] - mu[ib][RAW_INDEX[x]]) for x in vis])
+                r = np.array([abs(mu[ia][RAW_INDEX[x]] - mu[ib][RAW_INDEX[x]]) for x in rest])
+                pairs.append({"pair": f"{a} vs {b_}",
+                              "mean gap, visible": round(float(v.mean()), 1),
+                              "mean gap, beyond visible": round(float(r.mean()), 1)})
+        if pairs:
+            st.dataframe(pd.DataFrame(pairs), hide_index=True,
+                         use_container_width=True)
+            st.caption("Absolute difference in mean reflectance, averaged over the "
+                       "bands in each group.")
+
+
+# ------------------------------------------------------ where the model looks
+elif page == "Where the model looks":
+    st.title("Where the model looks")
+    st.write(
+        "Grad-CAM over the selected conv block. The map is the class score's "
+        "gradient-weighted activation, upsampled to the patch. Both models see "
+        "the same patch, so the comparison is like for like."
+    )
+    from src.visualization.interpret import (grad_cam, upsample, composite,
+                                             n_blocks)
+    import matplotlib.cm as cm
+
+    c1, c2, c3 = st.columns(3)
+    left = c1.selectbox("model A", list(CONFIGS), index=0)
+    right = c2.selectbox("model B", list(CONFIGS), index=1)
+    cls = c3.selectbox("class", CLASSES, index=CLASSES.index("River"))
+
+    per_class = indices_by_class(16)
+    candidates = per_class[CLASSES.index(cls)]
+    pa = predictions(left, candidates)
+    pb = predictions(right, candidates)
+    outcome = st.radio(
+        "show patches where",
+        ["any outcome", "A wrong, B correct", "A correct, B wrong",
+         "both wrong", "both correct"], horizontal=True)
+    keep = []
+    for i, (ya, a), (_, b) in zip(candidates, pa, pb):
+        ok_a, ok_b = a == ya, b == ya
+        if (outcome == "any outcome"
+                or (outcome == "A wrong, B correct" and not ok_a and ok_b)
+                or (outcome == "A correct, B wrong" and ok_a and not ok_b)
+                or (outcome == "both wrong" and not ok_a and not ok_b)
+                or (outcome == "both correct" and ok_a and ok_b)):
+            keep.append(i)
+    st.caption(f"{len(keep)} of {len(candidates)} sampled {cls} patches match. "
+               "The filter selects deliberately, so treat any single patch as an "
+               "illustration rather than evidence.")
+    if not keep:
+        st.info("No sampled patch matches that combination for this class.")
+        st.stop()
+    pick = st.select_slider("patch", options=list(range(len(keep))), value=0)
+    idx = keep[pick]
+
+    depth = st.slider("conv block (1 is earliest, higher is more abstract)",
+                      1, 4, 4)
+    base_img = raw_dataset()[idx]["image"].float()
+    view = composite(base_img, "True colour (B04/B03/B02)")
+
+    cols = st.columns(3)
+    cols[0].subheader("patch")
+    cols[0].image(view, use_container_width=True)
+    cols[0].caption(f"true colour, test index {idx}")
+
+    import torch
+    for col, label in zip(cols[1:], [left, right]):
+        model = model_for(label)
+        ds = dataset_for(label)
+        x, y = ds[idx]
+        blk = min(depth, n_blocks(model)) - 1
+        cam, pred, probs = grad_cam(model, x.unsqueeze(0), block=blk)
+        heat = (cm.inferno(upsample(cam, view.shape[0]))[:, :, :3] * 255)
+        blend = (0.55 * view + 0.45 * heat).astype(np.uint8)
+        col.subheader(label)
+        col.image(blend, use_container_width=True)
+        ok = "correct" if pred == y else "wrong"
+        col.caption(f"predicts **{CLASSES[pred]}** at {probs[pred]:.1%} ({ok}); "
+                    f"map is {cam.shape[0]}x{cam.shape[1]} before upsampling")
+    st.caption(
+        "The map resolution is set by the block: the deepest block of this "
+        "architecture is 8x8 for a 64x64 patch, so the overlay shows which "
+        "region carried the evidence, not a per-pixel segmentation."
+    )
+
+
+# --------------------------------------------------------- report figures
+elif page == "Report figures":
+    st.title("Report figures")
+    st.write("The figures as they appear in the write-up, generated by "
+             "`scripts/make_figures.py`.")
+    figs = [
+        ("pareto_accuracy_vs_params.png", "Accuracy against model size. The star "
+         "is the 12-band run, evaluated on a different split and shown for "
+         "orientation rather than as a point on the same curve."),
+        ("multispectral_per_class_f1.png", "Per-class F1, RGB against 12 bands. "
+         "The gain concentrates on River and the crop classes."),
+        ("virtual_sensor_rate_distortion.png", "Accuracy against the number of "
+         "learned channels k."),
+        ("virtual_sensor_response_functions.png", "Learned weight matrix per k: "
+         "each row is one virtual channel's response over the 12 bands."),
+        ("confusion_scratch_cnn_ms_rgb.png", "Confusion matrix, RGB."),
+        ("confusion_scratch_cnn_ms_all.png", "Confusion matrix, 12 bands."),
+        ("confusion_scratch_cnn_ms_indices.png", "Confusion matrix, bands plus indices."),
+    ]
+    for fname, cap in figs:
+        path = REPORTS / "figures" / fname
+        if path.exists():
+            st.image(str(path), caption=cap, use_container_width=True)
+        else:
+            st.warning(f"missing: {fname}")

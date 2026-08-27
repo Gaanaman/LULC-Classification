@@ -66,7 +66,13 @@ def _base_dataset(root: str, split: str):
         return TGEuroSAT(root=root, split=split,
                          bands=TGEuroSAT.all_band_names, download=False)
     except DatasetNotFoundError:
-        print(f"EuroSAT multispectral not found at {root}; downloading (~2GB).")
+        # Print the resolved path: a relative root that misses because of the
+        # caller's working directory would otherwise start a silent 2GB fetch.
+        import warnings
+        warnings.warn(
+            f"EuroSAT multispectral not found at {Path(root).resolve()}; "
+            "downloading (~2GB). Check the path if this was not intended.",
+            stacklevel=2)
         return TGEuroSAT(root=root, split=split,
                          bands=TGEuroSAT.all_band_names, download=True)
 
