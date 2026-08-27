@@ -283,7 +283,8 @@ elif page.startswith("3."):
     lo = min(df["accuracy (%)"].min(), rgb) - 0.3
     hi = max(df["accuracy (%)"].max(), full) + 0.3
     line = alt.Chart(df).mark_line(point=True).encode(
-        x=alt.X("k:O", title="channel budget k"),
+        x=alt.X("k:O", title="channel budget k",
+                        axis=alt.Axis(labelAngle=0, labelFontSize=13)),
         y=alt.Y("accuracy (%):Q", scale=alt.Scale(domain=[lo, hi]),
                 title="test accuracy (%)"),
         tooltip=["k", "accuracy (%)"])
@@ -306,9 +307,23 @@ elif page.startswith("3."):
         W = W.squeeze(-1).squeeze(-1).numpy()
         # sign of a row is arbitrary; draw with the largest weight positive
         W = np.array([r * (1 if r[np.argmax(np.abs(r))] > 0 else -1) for r in W])
-        st.dataframe(pd.DataFrame(W, columns=BANDS,
-                                  index=[f"channel {i}" for i in range(len(W))]).round(3),
-                     use_container_width=True)
+        # The 12-band matrix does not fit a narrow pane, and the reading of it
+        # is the regional share below, so the raw weights sit behind a toggle.
+        top = []
+        for i, row in enumerate(W):
+            rank = np.argsort(-np.abs(row))[:3]
+            top.append({"channel": f"channel {i}",
+                        "strongest bands": ", ".join(
+                            f"{BANDS[j]} ({row[j]:+.2f})" for j in rank)})
+        st.write("Bands each channel weights most")
+        st.dataframe(pd.DataFrame(top), use_container_width=True, hide_index=True)
+        with st.expander("Full weight matrix, all 12 bands"):
+            st.dataframe(pd.DataFrame(W, columns=BANDS,
+                                      index=[f"channel {i}" for i in range(len(W))]).round(3),
+                         use_container_width=True)
+            st.caption("Rows are virtual channels, columns the standardised input "
+                       "bands. The sign of a row is arbitrary and is fixed here so "
+                       "the largest weight is positive.")
         share = []
         for i, row in enumerate(W):
             m = np.abs(row); tot = m.sum()
@@ -340,9 +355,19 @@ elif page == "Where the errors are":
         c3.metric("accuracy", f"{(total - errors) / total * 100:.2f}%")
 
         off = m.copy(); np.fill_diagonal(off, 0)
-        st.write("Off-diagonal counts, classes ordered so groups sit together")
-        st.dataframe(pd.DataFrame(off, index=GROUPED, columns=GROUPED),
-                     use_container_width=True)
+        pairs = [{"true class": GROUPED[i], "predicted as": GROUPED[j],
+                  "patches": int(off[i][j])}
+                 for i in range(len(GROUPED)) for j in range(len(GROUPED))
+                 if off[i][j] > 0]
+        pairs.sort(key=lambda r: -r["patches"])
+        st.write("Most frequent confusions")
+        st.dataframe(pd.DataFrame(pairs[:8]), use_container_width=True,
+                     hide_index=True)
+        with st.expander("Full confusion matrix, all 10 classes"):
+            st.dataframe(pd.DataFrame(off, index=GROUPED, columns=GROUPED),
+                         use_container_width=True)
+            st.caption("Off-diagonal counts only. Rows are the true class, columns "
+                       "the prediction, ordered so members of a group sit together.")
 
         idx = {c: i for i, c in enumerate(GROUPED)}
         within = {}
