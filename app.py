@@ -197,13 +197,24 @@ elif page.startswith("1."):
     st.dataframe(df, use_container_width=True, hide_index=True)
     m = df.melt("model", ["plain (%)", "+ distillation (%)"],
                 var_name="training", value_name="accuracy")
-    st.altair_chart(alt.Chart(m).mark_bar().encode(
-        x=alt.X("model:N", sort=None, title=""),
+    # Dot plot rather than bars: the axis is zoomed to make sub-percent
+    # differences visible, and a bar truncated well above zero would overstate
+    # them. Position carries the value; the stem is only a reading aid.
+    cap_base = alt.Chart(m).encode(
+        x=alt.X("model:N", sort=None, title="",
+                axis=alt.Axis(labelAngle=0, labelFontSize=13)),
         xOffset="training:N",
         y=alt.Y("accuracy:Q", scale=alt.Scale(domain=[90, 98]),
                 title="test accuracy (%)"),
-        color=alt.Color("training:N", title=""),
-        tooltip=["model", "training", "accuracy"]), use_container_width=True)
+        color=alt.Color("training:N", title="",
+                        scale=alt.Scale(range=["#e8833a", "#4c8fd4"])),
+        tooltip=["model", "training", "accuracy"])
+    st.altair_chart(
+        (cap_base.mark_rule(size=2, opacity=0.35).encode(y2=alt.datum(90))
+         + cap_base.mark_circle(size=150)).properties(height=340),
+        use_container_width=True)
+    st.caption("The vertical axis starts at 90%, not zero, so the marks show "
+               "position rather than magnitude.")
     t = acc("efficientnet_v2_s")
     st.info(
         f"The teacher reaches {t:.2f}%, so the soft targets are accurate. "
@@ -224,10 +235,20 @@ elif page.startswith("2."):
                        for n, r in band_runs if acc(r)])
     lo = df["accuracy (%)"].min() - 0.4
     hi = df["accuracy (%)"].max() + 0.2
-    st.altair_chart(alt.Chart(df).mark_bar().encode(
-        x=alt.X("input:N", sort=None, title=""),
-        y=alt.Y("accuracy (%):Q", scale=alt.Scale(domain=[lo, hi])),
-        tooltip=["input", "accuracy (%)"]), use_container_width=True)
+    # Horizontal so the long configuration names stay readable in a narrow
+    # pane, and dots rather than bars because the axis does not start at zero.
+    band_base = alt.Chart(df).encode(
+        y=alt.Y("input:N", sort=None, title="",
+                axis=alt.Axis(labelFontSize=13)),
+        x=alt.X("accuracy (%):Q", scale=alt.Scale(domain=[lo, hi]),
+                title="test accuracy (%)"),
+        tooltip=["input", "accuracy (%)"])
+    st.altair_chart(
+        (band_base.mark_rule(size=2, opacity=0.35).encode(x2=alt.datum(lo))
+         + band_base.mark_circle(size=170)).properties(height=200),
+        use_container_width=True)
+    st.caption(f"The axis spans {lo:.1f}-{hi:.1f}%, not zero to 100, so the "
+               "marks show position rather than magnitude.")
     st.dataframe(df, use_container_width=True, hide_index=True)
 
     st.subheader("Per-class F1: RGB against 12 bands")
@@ -438,7 +459,8 @@ elif page == "Spectral signatures":
                  .encode(x=alt.X("wavelength (nm):Q",
                                  scale=alt.Scale(type="log", nice=False)),
                          y=alt.Y("reflectance:Q", title="mean reflectance"),
-                         color="class:N",
+                         color=alt.Color("class:N",
+                                         scale=alt.Scale(scheme="tableau10")),
                          tooltip=["class", "band", "wavelength (nm)", "reflectance"])
                  .properties(height=380))
         st.altair_chart(chart, use_container_width=True)
