@@ -152,22 +152,16 @@ STEPS = [
 
 st.markdown("""
 <style>
-/* the rail linking the bulbs, drawn behind them */
-div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-nav"]) {
-    position: relative;
-    align-items: flex-start;
-}
-div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-nav"])::before {
-    content: "";
-    position: absolute;
-    top: 18px; left: 7%; right: 7%;
-    height: 2px;
-    background: rgba(250, 250, 250, 0.16);
-    z-index: 0;
-}
-div[class*="st-key-nav"] { display: flex; justify-content: center; }
+/* help= wraps the button in tooltip elements that shrink to fit, which would
+   left align the bulb in its column away from its label. Force the chain to
+   the column width so each bulb and its label share one centre. */
+div[class*="st-key-nav"],
+div[class*="st-key-nav"] [data-testid="stButton"],
+div[class*="st-key-nav"] [data-testid="stTooltipIcon"],
+div[class*="st-key-nav"] [data-testid="stTooltipHoverTarget"] { width: 100%; }
+div[class*="st-key-nav"] [data-testid="stTooltipHoverTarget"] { justify-content: center; }
 div[class*="st-key-nav"] button {
-    position: relative; z-index: 1;
+    display: block; margin: 0 auto;
     width: 38px; height: 38px; min-height: 38px;
     padding: 0; border-radius: 50%;
     font-size: 12px; font-variant-numeric: tabular-nums;
@@ -183,7 +177,7 @@ div[class*="st-key-nav"] button {
 if "page" not in st.session_state:
     st.session_state.page = STEPS[0][0]
 
-for col, (full, short), n in zip(st.columns(len(STEPS)), STEPS,
+for col, (full, short), n in zip(st.columns(len(STEPS), gap="small"), STEPS,
                                  range(1, len(STEPS) + 1)):
     on = st.session_state.page == full
     with col:
@@ -330,15 +324,25 @@ elif page.startswith("3."):
     full = acc("scratch_cnn_ms_all")
     lo = min(df["accuracy (%)"].min(), rgb) - 0.3
     hi = max(df["accuracy (%)"].max(), full) + 0.3
-    line = alt.Chart(df).mark_line(point=True).encode(
+    line = alt.Chart(df).mark_line(point=True, color="#4c8fd4", size=2.5).encode(
         x=alt.X("k:O", title="channel budget k",
-                        axis=alt.Axis(labelAngle=0, labelFontSize=13)),
+                axis=alt.Axis(labelAngle=0, labelFontSize=13)),
         y=alt.Y("accuracy (%):Q", scale=alt.Scale(domain=[lo, hi]),
                 title="test accuracy (%)"),
         tooltip=["k", "accuracy (%)"])
-    rules = alt.Chart(pd.DataFrame({
-        "y": [rgb, full], "label": ["RGB, 3 channels", "all 12 bands"]})).mark_rule(
-        strokeDash=[4, 4]).encode(y="y:Q", color=alt.Color("label:N", title=""))
+    # The two references sat on the same dash pattern and adjacent default hues,
+    # so the legend could not separate them. Vary both channels.
+    names = ["RGB, 3 channels", "all 12 bands"]
+    rules = alt.Chart(pd.DataFrame({"y": [rgb, full], "reference": names})).mark_rule(
+        size=2).encode(
+        y="y:Q",
+        color=alt.Color("reference:N", title="reference",
+                        scale=alt.Scale(domain=names,
+                                        range=["#e8833a", "#57a773"])),
+        strokeDash=alt.StrokeDash("reference:N", title="reference",
+                                  scale=alt.Scale(domain=names,
+                                                  range=[[2, 3], [10, 4]])),
+        tooltip=["reference", "y"])
     st.altair_chart(line + rules, use_container_width=True)
     c1, c2 = st.columns(2)
     c1.metric("RGB, 3 fixed channels", f"{acc('scratch_cnn_ms_rgb'):.2f}%")
