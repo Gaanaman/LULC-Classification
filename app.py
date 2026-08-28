@@ -261,7 +261,7 @@ elif page.startswith("1."):
     st.info(
         f"The teacher reaches {t:.2f}%, so the soft targets are accurate. "
         "Distillation still changes accuracy by less than run-to-run variation at the "
-        "two larger sizes, and lowers the smallest student by 0.82%."
+        "two larger sizes, and lowers the smallest student by 0.81%."
     )
 
 
